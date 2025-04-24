@@ -5,15 +5,20 @@ from flask import render_template
 import os
 import json
 
+import joblib
+
 
 class Model:
 
     def __init__(self):
-        with open('assets/phrase.txt', 'r') as file:
-            self.phrase = file.read()
+        # Load the model
+        # https://www.kaggle.com/datasets/subhajournal/phishingemails?resource=download
+        self.model = joblib.load('./assets/phishing_model.pkl')
 
     def predict(self, input):
-        return self.phrase
+        # Make a prediction
+        prediction = self.model.predict([input])[0]
+        return prediction
 
 
 model = Model()
@@ -30,9 +35,28 @@ def index():
         type=str,
     )
     prediction = app.model.predict(user_input)
+
+    tfidif_vector = app.model.model['tfidf'].transform([user_input])
+
+    # Get the feature names
+    feature_names = app.model.model['tfidf'].get_feature_names_out()
+
+    # Get the tf-idf scores for the input
+    tfidf_scores = tfidif_vector.toarray()[0]
+
+    # Create a dictionary of feature names and their corresponding tf-idf scores
+    tfidf_dict = {feature_names[i]: tfidf_scores[i] for i in range(len(feature_names))}
+
+    # Sort the dictionary by tf-idf scores in descending order
+    sorted_tfidf_dict = dict(sorted(tfidf_dict.items(), key=lambda item: item[1], reverse=True))
+
+    # Get the top 10 features
+    top_10_features = dict(list(sorted_tfidf_dict.items())[:min(10, len(user_input.split()))])
+
     output = {
         'input': user_input,
         'prediction': prediction,
+        'reason': "The top 10 features that contributed to the prediction are: " + str(top_10_features),
     }
     return app.response_class(
         response=json.dumps(output),
